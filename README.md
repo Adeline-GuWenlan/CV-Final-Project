@@ -492,25 +492,41 @@ booktitle = {Proceedings of the 41st International Conference on Machine Learnin
 
 <details>
 <summary>
-    <a href="https://arxiv.org/abs/2408.01536"> Active Learning for Neural PDE Solvers - NeurIPS-W'2024 </a>
+    <a href="https://arxiv.org/abs/2408.01536"> Active Learning for Neural PDE Solvers - ICLR-2025 </a>
 </summary>
 <br/>
 
 ```
-@article{active-learn-neuralpde-benchmark-musekamp:2024,
+@article{active-learn-neuralpde-benchmark-musekamp:2025,
  author       = {Daniel Musekamp and
                  Marimuthu Kalimuthu and
                  David Holzm{\"{u}}ller and
                  Makoto Takamoto and
                  Mathias Niepert},
  title        = {Active Learning for Neural {PDE} Solvers},
- journal      = {CoRR},
- volume       = {abs/2408.01536},
- year         = {2024},
- url          = {https://doi.org/10.48550/arXiv.2408.01536},
- doi          = {10.48550/ARXIV.2408.01536},
- eprinttype    = {arXiv},
- eprint       = {2408.01536},
+ booktitle    = {The Thirteenth International Conference on Learning Representations (ICLR)},
+ year         = {2025},
+ url          = {https://openreview.net/forum?id=x4ZmQaumRg}
+}
+```
+
+</details>
+
+<details>
+<summary>
+    <a href="https://arxiv.org/abs/2504.04260"> LOGLO-FNO: Efficient Learning of Local and Global Features in Fourier Neural Operators - TMLR-2025 </a>
+</summary>
+<br/>
+
+```
+@article{loglo-fno-local-global-spectral-conv-kalimuthu:2025,
+title   = {{LOGLO}-{FNO}: Efficient Learning of Local and Global Features in Fourier Neural Operators},
+author  = {Marimuthu Kalimuthu and David Holzm{\"u}ller and Mathias Niepert},
+journal = {Transactions on Machine Learning Research},
+issn    = {2835-8856},
+year    = {2025},
+url     = {https://openreview.net/forum?id=MQ1dRdHTpi},
+note    = {J2C Certification}
 }
 ```
 
