@@ -236,7 +236,7 @@ def run_training(
 
                 if training_type in ["autoregressive"]:
                     # Initialize the prediction tensor
-                    pred = yy[..., :initial_step, :]
+                    pred = yy_tensor[..., :initial_step, :]
 
                     # Extract shape of the input tensor for reshaping (i.e. stacking the
                     # time and channels dimension together)

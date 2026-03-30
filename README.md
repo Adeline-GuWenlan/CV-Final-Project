@@ -26,6 +26,36 @@ Created and maintained by Makoto Takamoto
 Francesco Alesiani, Dirk Pflüger, and Mathias Niepert.
 
 ---
+## Compatibility with Newer Python, JAX, PyTorch, and CUDA Versions
+
+While this project officially targets older versions: 
+- Python 3.9  
+- JAX 0.4.11  
+- PyTorch 1.13.0  
+- CUDA 11.7  
+
+we have verified that most components remain compatible with newer releases.:
+- Python 3.12  
+- JAX 0.9.2  
+- PyTorch 2.11.0  
+- CUDA 13.0  
+
+In particular, the core codebase, forward training in `pdebench/model`, and data generation in `data_gen_NLE` work with these newer versions.
+Compatibility for the remaining components is still under investigation.
+_Last updated: 2026-03-30_
+
+## Data Path Issue in Forward Training (`model/fno/utils.py` and `model/unet/utils.py`)
+
+We identified an issue with data paths during forward training in `model/fno/utils.py` and `model/unet/utils.py`. This problem is caused by Hydra modifying the `data_path` at runtime.
+
+To resolve this issue, please use the commented lines:
+- Lines 185–188 in `model/fno/utils.py`  
+- Lines 185–187 in `model/unet/utils.py`  
+
+(Note that the above modification (use of "to_absolute_path" in hydra) is allowed Hydra version >= 0.11.0.)
+
+_Last updated: 2026-03-30_
+
 
 ## Datasets and Pretrained Models
 
