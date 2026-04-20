@@ -3,6 +3,15 @@
 Here we enumerate the list of all available PDEs in PDEBench and the commands to
 download them.
 
+`$proj_home` below is a placeholder, not a predefined environment variable.
+Replace it with a writable absolute path on your system, or export it first, for
+example `export proj_home=/gpfsnyu/scratch/$USER`.
+
+`download_direct.py` will now resume an existing partial file when the remote
+server supports byte-range requests, and it will automatically retry when the
+remote side closes the connection early, so interrupted downloads do not have
+to be restarted from zero by hand.
+
 | PDEs        | Dataset Download                                                                 | Dataset Size |
 | ----------- | :------------------------------------------------------------------------------- | ------------ |
 | advection   | `python download_direct.py --root_folder $proj_home/data --pde_name advection`   | 47 GB        |

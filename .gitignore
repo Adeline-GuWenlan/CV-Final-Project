@@ -177,5 +177,38 @@ debug/
 .DS_Store
 
 # neural net, sciml artefacts
-.pt
-.hdf5
+*.pt
+*.hdf5
+
+# local OS cruft
+.DS_Store
+._*
+__MACOSX/
+
+# local agent/editor notes
+Agent.md
+AGENT.md
+
+# local run logs
+nohup.out
+slurm-*.out
+slurm-*.err
+run_logs/
+
+# local datasets and large binary artifacts
+*.h5
+*.npz
+*.npy
+*.pickle
+*.pth
+*.ckpt
+/data/
+/dataset/
+/datasets/
+/pdebench_data/
+
+# generated analysis outputs
+/artifacts/figures/
+/pdebench/data_download/seed_snapshots/
+/pdebench/data_download/movie_2d_reacdiff.gif
+/pdebench/data_download/reacdiff_debug.png

@@ -1,0 +1,113 @@
+% THIS TEMPLATE IS A WORK IN PROGRESS
+
+\documentclass{article}
+
+\usepackage{hyperref}
+\usepackage{fancyhdr}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+%\lhead{\includegraphics[width=0.2\textwidth]{nyush-logo.pdf}}
+\fancypagestyle{firstpage}{%
+  \lhead{NYU Shanghai}
+  \rhead{
+  %%%% COMMENT OUT / UNCOMMENT THE LINES BELOW TO FIT WITH YOUR MAJOR(S)
+  %\&
+  %Data
+   Machine Learning 2021}
+}
+
+%%%% PROJECT TITLE
+\title{Spectral Diagnosis of Architectural Inductive Biases in Neural PDE Solvers Across Compressible Flow Regimes}
+
+%%%% NAMES OF ALL THE STUDENTS INVOLVED (first-name last-name)
+\author{\href{mailto:wg2139@nyu.edu}{Wenlan Gu}}
+
+\date{\vspace{-5ex}} %NO DATE
+
+
+\begin{document}
+\maketitle
+\thispagestyle{firstpage}
+
+\section*{Problem Statement and Motivation}
+
+Neural operators frame PDE solving as image-to-image regression: given a spatial field at time $t$, predict the field at $t + \Delta t$. Two dominant architectures encode fundamentally different spatial priors.
+
+FNO applies learned spectral convolutions that induce global interactions; in practice, mode truncation or spectral filtering suppresses high-frequency components, leading to an effective low-frequency bias.
+
+U-Net uses hierarchical local convolutions with skip connections, capturing local texture through its encoder-decoder structure but lacking direct global frequency access.
+
+This project investigates \textbf{how these inductive biases interact with the spatial frequency content of PDE solutions} using the PDEBench 2D Compressible Navier-Stokes dataset.
+
+As Mach number increases and viscosity decreases, the flow transitions from smooth, diffusion-dominated regimes to regimes characterized by steep gradients and potential shock formation. This corresponds to a shift from solutions dominated by low-frequency components to those requiring increasingly high-frequency content to resolve sharp features, thereby creating a controlled spectrum of frequency complexity.
+
+The core contribution is a \textbf{frequency-domain diagnostic framework}, combining FFT spectral decomposition and Difference-of-Gaussians (DoG) scale-space analysis that explains model errors in terms of architectural frequency preferences rather than a single aggregate metric, connecting the spectral bias phenomenon from vision to scientific computing.
+
+\section*{Background and Related Work}
+
+\begin{itemize}
+    \item \textbf{Takamoto et al.\ (2022)}~\cite{takamoto2022pdebench} introduced PDEBench, the benchmark suite providing the compressible NS dataset and baseline results used here.
+    \item \textbf{Li et al.\ (2021)}~\cite{li2021fourier} proposed FNO, whose truncated spectral convolution is the architectural choice this project diagnoses.
+    \item \textbf{Ronneberger et al.\ (2015)}~\cite{ronneberger2015unet} introduced U-Net, the standard encoder-decoder baseline for dense prediction.
+    \item \textbf{Rahaman et al.\ (2019)}~\cite{rahaman2019spectral} established that neural networks exhibit spectral bias---learning low-frequency components faster than high-frequency ones, providing theoretical motivation for our frequency-decomposed analysis.
+    \item \textbf{Brandstetter et al.\ (2022)}~\cite{brandstetter2022message} proposed the pushforward trick for stable autoregressive PDE prediction, which we adopt for U-Net rollout training.
+\end{itemize}
+
+\section*{Data}
+
+We use PDEBench's pre-generated 2D Compressible Navier-Stokes HDF5 data, with arrays packed as $[b, t, x_1, x_2, v]$---batch, time, two spatial dimensions, and four physical channels (density, $x$-velocity, $y$-velocity, pressure). All samples sit on a uniform spatial grid.
+
+PDEBench provides eight parameter configurations spanning two axes of physical difficulty: Mach number ($M=0.1$ vs $M=1.0$) and viscosity ($\eta=0.1$, $0.01$, $\approx 0$). Rather than exhaustively benchmarking all eight, we select three that form a controlled progression from smooth to discontinuous physics:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}llp{7cm}@{}}
+\toprule
+\textbf{Mach} & \textbf{Viscosity} & \textbf{Why selected} \\
+\midrule
+0.1 & 0.1 & Nearly incompressible, maximally smooth---establishes FNO's best-case spectral advantage \\
+1.0 & 0.01 & Sonic with thin shocks---transitional regime where advantage begins eroding \\
+1.0 & $\approx 0$ & True discontinuities---both architectures reach their limit \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+This design enables a controlled study: the same equation and architectures are evaluated as the spatial frequency content of the ground truth shifts progressively toward higher frequencies.
+
+\section*{Proposed Methods and Analytical Framework}
+
+U-Net serves as a pixel-space control: its purely local convolutional inductive bias contains no frequency-domain structure, providing a reference for isolating what FNO's Fourier-space bias specifically contributes. Rather than treating model comparison as a horse race, we use three complementary diagnostic tools to decompose prediction errors along two axes---frequency and space---and track how each architecture's failure mode shifts as the underlying physics transitions from smooth to discontinuous.
+
+\subsection*{Baseline Reproduction}
+
+We train FNO and U-Net across all three configurations using PDEBench's implementations (U-Net with the pushforward trick for autoregressive stability), establishing per-regime nRMSE baselines consistent with published results. These aggregate numbers set the stage but deliberately obscure \emph{where} and \emph{at what scale} each model fails---which is what the following analyses are designed to reveal.
+
+\subsection*{FFT Spectral Error Decomposition (Primary Contribution)}
+
+For each prediction, we compute the 2D FFT of the error field and partition the frequency plane into concentric annular bands (low, mid, high). Per-band nRMSE is computed across all regimes for both models, producing a diagnostic map of how each architecture's error distribution shifts as physical content changes. The key diagnostic quantity is the \textbf{FNO advantage ratio} (U-Net fRMSE / FNO fRMSE) computed per frequency band per regime. We expect this ratio to reveal that FNO's superiority is frequency-selective and regime-dependent: dominant at low frequencies on smooth fields, narrowing at mid frequencies as shocks appear, and vanishing entirely at high frequencies in the inviscid shock regime. This decomposition separates two distinct failure modes: (1) limitations specific to FNO's spectral truncation, and (2) limitations shared by both architectures that reflect intrinsic problem difficulty.
+
+\subsection*{DoG Scale-Space Analysis (Complementary)}
+
+FFT decomposition is spatially global as it tells you which frequencies fail but not where. To localize errors, we apply a Difference-of-Gaussians pyramid to both ground truth and error fields. This identifies whether errors concentrate near shock fronts or other localized structures, providing the spatial counterpart to the frequency-band analysis. Together, FFT and DoG form a complete spectral-spatial diagnostic: FFT answers ``at what scale do models fail,'' DoG answers ``at what location do models fail.''
+
+\subsection*{Physics-Informed Loss Augmentation (Planned Extension)}
+
+If time permits, we augment the MSE loss with a mass-conservation penalty ($\partial\rho/\partial t + \nabla \cdot (\rho \mathbf{v}) = 0$) and evaluate whether this reduces Gibbs-type artifacts in FNO predictions near shocks, \textbf{as measured by the spectral framework established above}. The convergence of both models' high-frequency errors in the shock regime suggests a fundamental representational gap that neither local convolution nor global Fourier mixing addresses---physics-informed regularization tests whether injecting domain knowledge can push past this architectural ceiling.
+
+\section*{Evaluation}
+
+We evaluate along four axes:
+
+\begin{itemize}
+    \item \textbf{Spatial nRMSE:} per regime, for comparison with PDEBench baselines.
+    \item \textbf{FFT-decomposed nRMSE:} per frequency band per regime---the main diagnostic metric revealing how error distributes across spatial scales for each architecture.
+    \item \textbf{Rollout stability:} nRMSE vs.\ number of autoregressive steps, assessing how quickly predictions diverge during sequential forecasting.
+    \item \textbf{Shock-proximity error correlation:} whether prediction errors spatially concentrate near detected discontinuities.
+\end{itemize}
+
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}
