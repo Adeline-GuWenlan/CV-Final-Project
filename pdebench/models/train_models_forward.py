@@ -149,11 +149,20 @@ arrangements between the parties relating hereto.
 from __future__ import annotations
 
 import logging
+import sys
+from pathlib import Path
 
 import hydra
 from omegaconf import DictConfig
 
 logger = logging.getLogger(__name__)
+
+# Support direct script execution from `pdebench/models`, where Python would
+# otherwise miss the repo root needed for `import pdebench...`.
+if __package__ in (None, ""):
+    repo_root = Path(__file__).resolve().parents[2]
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
 
 
 @hydra.main(version_base="1.2", config_path="config", config_name="config_rdb")

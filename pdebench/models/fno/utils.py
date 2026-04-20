@@ -191,6 +191,8 @@ class FNODatasetSingle(Dataset):
         root_path = Path(Path(saved_folder).resolve()) / filename
 
 
+        split_applied = False
+
         if filename[-2:] != "h5":
             # print(".HDF5 file extension is assumed hereafter")
 
@@ -198,14 +200,37 @@ class FNODatasetSingle(Dataset):
                 keys = list(f.keys())
                 keys.sort()
                 if "tensor" not in keys:
+                    # 2026-04-20: Select the requested CFD split before
+                    # materializing arrays so evaluation does not load the full
+                    # shard into RAM and OOM on large 2D CFD files.
+                    total_samples = f["density"].shape[0]
+                    reduced_total = len(range(0, total_samples, reduced_batch))
+                    if num_samples_max > 0:
+                        selected_total = min(num_samples_max, reduced_total)
+                    else:
+                        selected_total = reduced_total
+
+                    test_idx = int(selected_total * test_ratio)
+                    if if_test:
+                        sample_start = 0
+                        sample_stop = test_idx * reduced_batch
+                        selected_count = test_idx
+                    else:
+                        sample_start = test_idx * reduced_batch
+                        sample_stop = selected_total * reduced_batch
+                        selected_count = selected_total - test_idx
+
+                    sample_slice = slice(sample_start, sample_stop, reduced_batch)
+                    split_applied = True
+
                     _data = np.array(
-                        f["density"], dtype=np.float32
+                        f["density"][sample_slice], dtype=np.float32
                     )  # batch, time, x,...
                     idx_cfd = _data.shape
                     if len(idx_cfd) == 3:  # 1D
                         self.data = np.zeros(
                             [
-                                idx_cfd[0] // reduced_batch,
+                                selected_count,
                                 idx_cfd[2] // reduced_resolution,
                                 mt.ceil(idx_cfd[1] / reduced_resolution_t),
                                 3,
@@ -223,10 +248,10 @@ class FNODatasetSingle(Dataset):
                         self.data[..., 0] = _data  # batch, x, t, ch
                         # pressure
                         _data = np.array(
-                            f["pressure"], dtype=np.float32
+                            f["pressure"][sample_slice], dtype=np.float32
                         )  # batch, time, x,...
                         _data = _data[
-                            ::reduced_batch,
+                            :,
                             ::reduced_resolution_t,
                             ::reduced_resolution,
                         ]
@@ -235,10 +260,10 @@ class FNODatasetSingle(Dataset):
                         self.data[..., 1] = _data  # batch, x, t, ch
                         # Vx
                         _data = np.array(
-                            f["Vx"], dtype=np.float32
+                            f["Vx"][sample_slice], dtype=np.float32
                         )  # batch, time, x,...
                         _data = _data[
-                            ::reduced_batch,
+                            :,
                             ::reduced_resolution_t,
                             ::reduced_resolution,
                         ]
@@ -254,7 +279,7 @@ class FNODatasetSingle(Dataset):
                     if len(idx_cfd) == 4:  # 2D
                         self.data = np.zeros(
                             [
-                                idx_cfd[0] // reduced_batch,
+                                selected_count,
                                 idx_cfd[2] // reduced_resolution,
                                 idx_cfd[3] // reduced_resolution,
                                 mt.ceil(idx_cfd[1] / reduced_resolution_t),
@@ -264,7 +289,7 @@ class FNODatasetSingle(Dataset):
                         )
                         # density
                         _data = _data[
-                            ::reduced_batch,
+                            :,
                             ::reduced_resolution_t,
                             ::reduced_resolution,
                             ::reduced_resolution,
@@ -274,10 +299,10 @@ class FNODatasetSingle(Dataset):
                         self.data[..., 0] = _data  # batch, x, t, ch
                         # pressure
                         _data = np.array(
-                            f["pressure"], dtype=np.float32
+                            f["pressure"][sample_slice], dtype=np.float32
                         )  # batch, time, x,...
                         _data = _data[
-                            ::reduced_batch,
+                            :,
                             ::reduced_resolution_t,
                             ::reduced_resolution,
                             ::reduced_resolution,
@@ -287,10 +312,10 @@ class FNODatasetSingle(Dataset):
                         self.data[..., 1] = _data  # batch, x, t, ch
                         # Vx
                         _data = np.array(
-                            f["Vx"], dtype=np.float32
+                            f["Vx"][sample_slice], dtype=np.float32
                         )  # batch, time, x,...
                         _data = _data[
-                            ::reduced_batch,
+                            :,
                             ::reduced_resolution_t,
                             ::reduced_resolution,
                             ::reduced_resolution,
@@ -300,10 +325,10 @@ class FNODatasetSingle(Dataset):
                         self.data[..., 2] = _data  # batch, x, t, ch
                         # Vy
                         _data = np.array(
-                            f["Vy"], dtype=np.float32
+                            f["Vy"][sample_slice], dtype=np.float32
                         )  # batch, time, x,...
                         _data = _data[
-                            ::reduced_batch,
+                            :,
                             ::reduced_resolution_t,
                             ::reduced_resolution,
                             ::reduced_resolution,
@@ -324,7 +349,7 @@ class FNODatasetSingle(Dataset):
                     if len(idx_cfd) == 5:  # 3D
                         self.data = np.zeros(
                             [
-                                idx_cfd[0] // reduced_batch,
+                                selected_count,
                                 idx_cfd[2] // reduced_resolution,
                                 idx_cfd[3] // reduced_resolution,
                                 idx_cfd[4] // reduced_resolution,
@@ -335,7 +360,7 @@ class FNODatasetSingle(Dataset):
                         )
                         # density
                         _data = _data[
-                            ::reduced_batch,
+                            :,
                             ::reduced_resolution_t,
                             ::reduced_resolution,
                             ::reduced_resolution,
@@ -346,10 +371,10 @@ class FNODatasetSingle(Dataset):
                         self.data[..., 0] = _data  # batch, x, t, ch
                         # pressure
                         _data = np.array(
-                            f["pressure"], dtype=np.float32
+                            f["pressure"][sample_slice], dtype=np.float32
                         )  # batch, time, x,...
                         _data = _data[
-                            ::reduced_batch,
+                            :,
                             ::reduced_resolution_t,
                             ::reduced_resolution,
                             ::reduced_resolution,
@@ -360,10 +385,10 @@ class FNODatasetSingle(Dataset):
                         self.data[..., 1] = _data  # batch, x, t, ch
                         # Vx
                         _data = np.array(
-                            f["Vx"], dtype=np.float32
+                            f["Vx"][sample_slice], dtype=np.float32
                         )  # batch, time, x,...
                         _data = _data[
-                            ::reduced_batch,
+                            :,
                             ::reduced_resolution_t,
                             ::reduced_resolution,
                             ::reduced_resolution,
@@ -374,10 +399,10 @@ class FNODatasetSingle(Dataset):
                         self.data[..., 2] = _data  # batch, x, t, ch
                         # Vy
                         _data = np.array(
-                            f["Vy"], dtype=np.float32
+                            f["Vy"][sample_slice], dtype=np.float32
                         )  # batch, time, x,...
                         _data = _data[
-                            ::reduced_batch,
+                            :,
                             ::reduced_resolution_t,
                             ::reduced_resolution,
                             ::reduced_resolution,
@@ -388,10 +413,10 @@ class FNODatasetSingle(Dataset):
                         self.data[..., 3] = _data  # batch, x, t, ch
                         # Vz
                         _data = np.array(
-                            f["Vz"], dtype=np.float32
+                            f["Vz"][sample_slice], dtype=np.float32
                         )  # batch, time, x,...
                         _data = _data[
-                            ::reduced_batch,
+                            :,
                             ::reduced_resolution_t,
                             ::reduced_resolution,
                             ::reduced_resolution,
@@ -509,16 +534,17 @@ class FNODatasetSingle(Dataset):
                 self.grid = _grid
                 self.tsteps_t = tsteps_t
 
-        if num_samples_max > 0:
-            num_samples_max = min(num_samples_max, self.data.shape[0])
-        else:
-            num_samples_max = self.data.shape[0]
+        if not split_applied:
+            if num_samples_max > 0:
+                num_samples_max = min(num_samples_max, self.data.shape[0])
+            else:
+                num_samples_max = self.data.shape[0]
 
-        test_idx = int(num_samples_max * test_ratio)
-        if if_test:
-            self.data = self.data[:test_idx]
-        else:
-            self.data = self.data[test_idx:num_samples_max]
+            test_idx = int(num_samples_max * test_ratio)
+            if if_test:
+                self.data = self.data[:test_idx]
+            else:
+                self.data = self.data[test_idx:num_samples_max]
 
         # Time steps used as initial conditions
         self.initial_step = initial_step

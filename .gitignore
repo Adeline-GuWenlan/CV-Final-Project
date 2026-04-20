@@ -194,6 +194,7 @@ nohup.out
 slurm-*.out
 slurm-*.err
 run_logs/
+/runs/
 
 # local datasets and large binary artifacts
 *.h5

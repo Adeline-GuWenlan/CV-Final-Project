@@ -63,6 +63,68 @@ From `config_2DCFD.yaml`:
 These are the first hyperparameters to keep fixed if the goal is faithful
 baseline reproduction.
 
+## Validated Reading Of The Current Fourier Metric
+
+This section records what the repo actually does today, based on the code
+paths that are active during official evaluation.
+
+### Where it is implemented
+
+- `pdebench/models/metrics.py`
+  - `metric_func()` computes the low/mid/high Fourier metric.
+- `pdebench/models/fno/train.py`
+  - evaluation calls `metrics(...)` and pickles only the returned aggregates.
+- `pdebench/models/config/config_rdb.yaml`
+  - Hydra keeps the run directory at `.` so checkpoint lookup still depends on
+    the shell working directory.
+
+### What happens numerically in 2D
+
+From `pdebench/models/metrics.py`:
+
+1. The first `initial_step` frames are dropped before any metric is computed.
+2. Tensors are permuted to `[batch, channel, x, y, time]`.
+3. A 2D FFT is taken over spatial axes only:
+   - `pred_F = torch.fft.fftn(pred, dim=[2, 3])`
+   - `target_F = torch.fft.fftn(target, dim=[2, 3])`
+4. The squared complex coefficient error is formed:
+   - `_err_F = torch.abs(pred_F - target_F) ** 2`
+   - by linearity this is equivalent to the Fourier-domain energy of
+     `pred - target`, but the code immediately aggregates it.
+5. Only the first quadrant is binned:
+   - loops over `i in range(nx // 2)`, `j in range(ny // 2)`
+6. Each coefficient is assigned to a radial shell with
+   - `it = floor(sqrt(i**2 + j**2))`
+7. Shell energies are summed, not normalized by the number of coefficients in
+   that shell.
+8. Shells are collapsed into three fixed shell-index ranges:
+   - `low = [0, 4)`
+   - `mid = [4, 12)`
+   - `high = [12, end)`
+9. With `if_mean=True`, the result is averaged over channel and time, so the
+   final Fourier output for one run is only three numbers.
+
+### Practical consequence
+
+- The current PDEBench FFT output is a coarse benchmark summary:
+  - one low / one mid / one high scalar per run
+- It is not yet a diagnostic tool:
+  - no per-sample spectra
+  - no per-channel spectra
+  - no per-time-step spectra
+  - no ground-truth spectrum
+  - no FNO vs U-Net advantage curves
+  - no location information
+
+### Important implementation caution
+
+- `metrics()` accumulates batch metrics inside `enumerate(val_loader)` and
+  divides by `itot` at the end.
+- Since `itot` is the last batch index rather than the batch count, this
+  averaging is slightly off.
+- For proposal analysis, reuse the official metric only as a baseline sanity
+  check, not as the final spectral analysis.
+
 ## Important Naming Mismatch
 
 This is the main trap in using the official pretrained FNO weights directly.
@@ -158,12 +220,13 @@ ln -s 2D_CFD_Rand_M1.0_Eta1e-08_Zeta1e-08_periodic_512_Train.hdf5 \
 ### How to use the aliases at runtime
 
 Keep `data_path` pointing at the real data directory, but pass the symlink name
-through `filename`. Example:
+through `filename`. Use this inside the GPU-allocated shell from the baseline
+eval section. Example:
 
 ```bash
 cd /gpfsnyu/scratch/wg2381/PDEBench/pdebench/models
 
-CUDA_VISIBLE_DEVICES=0 python3 train_models_forward.py \
+python train_models_forward.py \
   +args=config_2DCFD.yaml \
   ++args.model_name='FNO' \
   ++args.if_training=False \
@@ -206,18 +269,68 @@ That means the simplest setup is:
 
 ### Baseline eval command pattern
 
-```bash
-cd /gpfsnyu/scratch/wg2381/PDEBench/pdebench/models
+The working directory matters:
 
-CUDA_VISIBLE_DEVICES=0 python train_models_forward.py \
-  +args=config_2DCFD.yaml \
-  ++args.model_name='FNO' \
-  ++args.if_training=False \
-  ++args.data_path='/gpfsnyu/scratch/wg2381/pdebench_data/2D/CFD/2D_Train_Rand' \
-  ++args.filename='2D_CFD_M0.1_Eta0.1_Zeta0.1_periodic_128_Train.hdf5'
+- `pdebench/models/fno/train.py` derives `model_name = <filename_stem>_FNO`
+- it then loads `<model_name>.pt` and writes `<model_name>.pickle` in the
+  current working directory
+- `pdebench/models/config/config_rdb.yaml` sets `hydra.run.dir: .`, so Hydra
+  does not relocate the run; the shell cwd is still the checkpoint cwd
+
+Because GPU work must not run on the login node, use an interactive Slurm
+allocation on the Shanghai `gpu` partition first.
+
+Request the interactive GPU:
+
+```bash
+export TS=$(date +%Y%m%d-%H%M%S)
+export ARTIFACT_ROOT=/gpfsnyu/scratch/wg2381/PDEBench/artifacts/baseline_eval/$TS
+mkdir -p "$ARTIFACT_ROOT"
+
+srun --account=sw5973 --partition=gpu --qos=normal \
+  --gres=gpu:1 --cpus-per-task=4 --mem=32G --time=04:00:00 \
+  --pty bash
 ```
 
-Repeat the same command with the other two regime filenames.
+Then inside the allocated GPU shell:
+
+```bash
+set -euo pipefail
+# activate the PDEBench env here if needed
+
+cd /gpfsnyu/scratch/wg2381/PDEBench/pdebench/models
+
+for REGIME in \
+  2D_CFD_M0.1_Eta0.1_Zeta0.1_periodic_128_Train.hdf5 \
+  2D_CFD_M1.0_Eta0.01_Zeta0.01_periodic_128_Train.hdf5 \
+  2D_CFD_M1.0_Eta1e-08_Zeta1e-08_periodic_512_Train.hdf5
+do
+  STEM="${REGIME%.hdf5}"
+  OUT_DIR="$ARTIFACT_ROOT/$STEM"
+  mkdir -p "$OUT_DIR"
+
+  python train_models_forward.py \
+    +args=config_2DCFD.yaml \
+    ++args.model_name='FNO' \
+    ++args.if_training=False \
+    ++args.data_path='/gpfsnyu/scratch/wg2381/pdebench_data/2D/CFD/2D_Train_Rand' \
+    ++args.filename="$REGIME"
+
+  cp "${STEM}_FNO.pickle" "$OUT_DIR/"
+done
+
+python analyse_result_forward.py
+cp Results.csv Results.pdf "$ARTIFACT_ROOT/"
+```
+
+Why this pattern is safer:
+
+- respects the cluster rule that GPU jobs must run under Slurm, not on the
+  login node
+- keeps the cwd at `pdebench/models/`, where checkpoint lookup expects the
+  `.pt` files
+- stores timestamped baseline outputs in a structured artifact directory for
+  later FFT comparison
 
 ### Expected outputs
 
@@ -225,7 +338,14 @@ For each regime, PDEBench will generate:
 
 - `<stem>_FNO.pickle`
 
-That `.pickle` stores the aggregate metrics returned by `metrics.py`.
+The timestamped artifact root will also store:
+
+- `Results.csv`
+- `Results.pdf`
+
+That `.pickle` still stores only the aggregate metrics returned by
+`metrics.py`; it is enough for a baseline table but not enough for the
+proposal's FFT diagnostic analysis.
 
 ## Limitation Of The Existing Repo Relative To The Proposal
 
@@ -250,7 +370,7 @@ full proposal analysis.
 
 ## Whole Pipeline
 
-## Phase 0: Inventory And Naming
+## Phase 0: Inventory And Naming - DONE
 
 Objective:
 Make the official assets runnable without changing upstream PDEBench internals.
@@ -309,12 +429,93 @@ Checks:
 5. Same train/validation protocol:
    - PDEBench uses the first `10%` of the single HDF5 shard as validation
 
-Decision:
+Since the proposal later asks for fair FNO vs U-Net retraining on identical
+settings, retrain both models from scratch after the pretrained baseline
+evaluation is done.
 
-- If this baseline is only for comparison, keep the official hyperparameters.
-- If the proposal later asks for fair FNO vs U-Net retraining on identical
-  settings, retrain both models from scratch after the pretrained baseline
-  evaluation is done.
+## Caveat: What The `2D_rand` Generator Actually Does
+
+The earlier version of this note described the initialization as a hard square
+cut-and-paste. The code is more nuanced.
+
+Validated evidence from
+`pdebench/data_gen/data_gen_NLE/utils.py:init_multi_HD_2DRand(...)`:
+
+- the generator first builds full-domain random density / pressure / velocity
+  fields from low-order sinusoidal modes
+- it then randomly decides per sample whether to apply a windowed rectangular
+  mask:
+  - `cond = random.choice(..., p=[0.5, 0.5])`
+- when the window is used, the mask is not a hard box
+  - `x_win` and `y_win` are tanh windows
+  - the transition width is `trns = 0.01`
+  - the random field is multiplied by this mask
+  - outside the mask, density and pressure are filled back with constant
+    background values `d0` and `d0 * T0`
+- the mask bounds `xL, xR, yL, yR` are random, so the support is rectangular
+  and roughly central, but not fixed
+
+Interpretation for our FFT work:
+
+- the benchmark is not purely globally smooth turbulence-like data
+- it also is not a literal hard square discontinuity in all samples
+- instead, some samples contain steep geometry-imposed window edges at `t=0`,
+  while others remain full-domain random fields
+- these benchmark-induced edges can contribute mid/high-frequency ground-truth
+  power before shock evolution
+
+The goal is not to add one more benchmark number; it is to turn FFT into a
+diagnostic that explains why FNO vs U-Net fail differently as the regime
+changes.
+
+Updated proposal-aligned FFT plan:
+
+Step 1: establish what the benchmark spectrum actually looks like
+- compute ground-truth radial power spectra for each regime, channel, and time
+  step
+- inspect `t=0` separately from later rollout times
+- check whether high-band power comes from evolved dynamics, window edges, or
+  both
+
+Step 2: reproduce PDEBench's coarse FFT metric as a benchmark-only sanity check
+- report the official low/mid/high numbers from the `.pickle` outputs
+- do not over-interpret them, because they are fixed-shell aggregate
+  statistics
+
+Step 3: turn FFT into a diagnostic
+- save raw rollouts
+- compute radial spectra from `error = pred - target`
+- keep per-sample, per-channel, and per-time outputs
+- use normalized or physical wavenumber bins, not PDEBench's hard-coded shell
+  cutoffs `4` and `12`
+
+Step 4: compare error spectrum against ground-truth spectrum
+- when ground-truth high-band content rises, which model degrades faster?
+- is FNO failure more concentrated in higher normalized bands?
+- is U-Net relatively better on localized sharp structures while weaker on
+  global low-frequency organization?
+
+Step 5: connect frequency failure to spatial localization
+- FFT answers `which frequencies fail`
+- DoG answers `where they fail`
+
+Working hypothesis:
+
+- smooth regime:
+  - FNO should benefit from global spectral mixing and win mainly in low bands
+- transitional regime:
+  - FNO's advantage should narrow as sharper gradients push error toward
+    mid/high bands
+- hardest regime:
+  - both models should degrade, but the signatures should differ
+  - FNO should look more band-limited
+  - U-Net should look more localization-limited
+
+Claim discipline:
+
+- do not equate high-frequency energy with shocks by default
+- verify whether the ground-truth structure comes from solver-evolved fronts,
+  initial-condition geometry, or both
 
 ## Phase 3: Save Raw Rollout Tensors
 
@@ -377,25 +578,39 @@ Core computation:
 
 1. Compute error field:
    - `error = pred - target`
-2. For each sample, time step, and channel:
+2. Also compute ground-truth spectra:
+   - `gt_fft = FFT(target)`
+3. For each sample, time step, and channel:
    - compute 2D FFT over spatial dimensions only
-3. Convert `(kx, ky)` to radial wavenumber
-4. Bin power into annular bands
-5. Compute per-band normalized RMSE or spectral energy error
+4. Convert `(kx, ky)` to radial wavenumber
+5. Bin power into annular bands
+6. Compute per-band normalized RMSE or spectral energy error
 
 Recommended band design:
 
-Use fixed radial bins across all regimes, not per-regime quantiles.
+Use fixed normalized radial bins across all regimes, not per-regime quantiles.
+
+Do not reuse PDEBench's built-in cutoffs `iLow=4` and `iHigh=12` for proposal
+analysis:
+
+- those thresholds come from code defaults, not from physics
+- they correspond to different relative scales on `128 x 128` and `512 x 512`
+  grids
+- they are appropriate only for reproducing the official coarse benchmark
+  summary
 
 Suggested starting point:
 
-1. `low`: `0 <= k < k_max/6`
-2. `mid`: `k_max/6 <= k < k_max/3`
-3. `high`: `k >= k_max/3`
+1. define normalized radius `rho = k / k_Nyquist`
+2. `low`: `0 <= rho < 1/6`
+3. `mid`: `1/6 <= rho < 1/3`
+4. `high`: `1/3 <= rho <= 1`
+5. also save the full radial curve before collapsing to 3 bands
 
 Reason:
 
 - easier regime-to-regime comparison
+- comparable interpretation across `128` and `512` grids
 - cleaner FNO vs U-Net comparison later
 
 Outputs:
@@ -404,11 +619,13 @@ Outputs:
 2. per-regime averaged spectral metrics
 3. per-channel spectral metrics
 4. per-time-step spectral metrics for rollout stability analysis
+5. ground-truth radial spectra for the same samples
 
 Recommended artifact files:
 
 - `artifacts/fno_fft/<regime>/band_metrics.csv`
-- `artifacts/fno_fft/<regime>/radial_spectrum.npy`
+- `artifacts/fno_fft/<regime>/error_radial_spectrum.npy`
+- `artifacts/fno_fft/<regime>/gt_radial_spectrum.npy`
 
 ## Phase 5: Figures For The Proposal
 
@@ -521,7 +738,8 @@ The plan is successful when all of the following are true:
 1. The official FNO checkpoint can be evaluated on all three proposal regimes.
 2. We can reproduce a scalar baseline table for those three regimes.
 3. We can save raw FNO predictions and targets for the validation split.
-4. We can produce FFT low/mid/high error results per regime.
+4. We can produce full radial spectra plus normalized low/mid/high FFT results
+   per regime.
 5. The output is organized so U-Net can be dropped in later without changing the
    FFT analysis code.
 

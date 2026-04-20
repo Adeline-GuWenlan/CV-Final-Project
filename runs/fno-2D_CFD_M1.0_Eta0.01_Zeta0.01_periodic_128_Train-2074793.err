@@ -1,0 +1,13 @@
+Error executing job with overrides: ['+args=config_2DCFD.yaml', '++args.model_name=FNO', '++args.if_training=False', '++args.data_path=/gpfsnyu/scratch/wg2381/pdebench_data/2D/CFD/2D_Train_Rand', '++args.filename=2D_CFD_M1.0_Eta0.01_Zeta0.01_periodic_128_Train.hdf5']
+Traceback (most recent call last):
+  File "/gpfsnyu/scratch/wg2381/PDEBench/pdebench/models/train_models_forward.py", line 174, in main
+    run_training_FNO(
+  File "/gpfsnyu/scratch/wg2381/PDEBench/pdebench/models/fno/train.py", line 63, in run_training
+    train_data = FNODatasetSingle(
+                 ^^^^^^^^^^^^^^^^^
+  File "/gpfsnyu/scratch/wg2381/PDEBench/pdebench/models/fno/utils.py", line 296, in __init__
+    self.data[..., 0] = _data  # batch, x, t, ch
+    ~~~~~~~~~^^^^^^^^
+ValueError: could not broadcast input array from shape (9000,64,128,11) into shape (9000,64,64,21)
+
+Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.
