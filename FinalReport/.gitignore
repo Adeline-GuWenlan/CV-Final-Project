@@ -1,0 +1,11 @@
+# Keep only the final report deliverables in this directory.
+Computer_Vision_final_report.zip
+Inductive_Bias.md
+rubric.txt
+arXiv-2210.07182v7/
+
+# Ignore all local LaTeX/BibTeX sources and intermediates in the template dir
+# except for the final edited source and compiled PDF.
+template/*
+!template/main.tex
+!template/main.pdf
