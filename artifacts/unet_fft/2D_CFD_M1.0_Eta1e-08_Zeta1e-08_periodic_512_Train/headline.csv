@@ -1,0 +1,2 @@
+regime,num_samples,num_channels,num_time_after_slice,nbins,frmse_low_mean,frmse_mid_mean,frmse_high_mean,raw_shell_low,raw_shell_mid,raw_shell_high
+2D_CFD_M1.0_Eta1e-08_Zeta1e-08_periodic_512_Train,100,4,11,128,0.8821507692337036,1.362858772277832,5.562562465667725,1.17756187915802,0.3690706193447113,0.05719500407576561
