@@ -47,3 +47,27 @@ Slurm logs:
 
 Rollout: runs/fno-rollout-*-2092924.err / .out, -2092925, -2092926
 FFT analysis: runs/fno-fft-*-2092991.err / .out, -2092992, -2092993
+
+
+
+I added analysis/compare_fno_unet_rollout_samples.py and ran it for all three common regimes.
+
+The graphs are saved under artifacts/figures/fno_unet_rollout_compare. I plotted rollout steps 10 through 20 only, because steps 0 through 9 are conditioning frames and are identical by construction in both saved rollouts.
+
+Per regime, you now have:
+
+artifacts/figures/fno_unet_rollout_compare/2D_CFD_M0.1_Eta0.1_Zeta0.1_periodic_128_Train
+artifacts/figures/fno_unet_rollout_compare/2D_CFD_M1.0_Eta0.01_Zeta0.01_periodic_128_Train
+artifacts/figures/fno_unet_rollout_compare/2D_CFD_M1.0_Eta1e-08_Zeta1e-08_periodic_512_Train
+Each regime directory contains:
+
+artifacts/figures/fno_unet_rollout_compare/2D_CFD_M1.0_Eta0.01_Zeta0.01_periodic_128_Train/rmse_5samples_per_timestep.png
+artifacts/figures/fno_unet_rollout_compare/2D_CFD_M1.0_Eta0.01_Zeta0.01_periodic_128_Train/contact_sheet_density.png
+artifacts/figures/fno_unet_rollout_compare/2D_CFD_M1.0_Eta0.01_Zeta0.01_periodic_128_Train/contact_sheet_pressure.png
+artifacts/figures/fno_unet_rollout_compare/2D_CFD_M1.0_Eta0.01_Zeta0.01_periodic_128_Train/contact_sheet_Vx.png
+artifacts/figures/fno_unet_rollout_compare/2D_CFD_M1.0_Eta0.01_Zeta0.01_periodic_128_Train/contact_sheet_Vy.png
+The selected sample indices are recorded in artifacts/figures/fno_unet_rollout_compare/selected_samples.csv:
+
+For the two 1000-sample regimes: 0, 249, 499, 749, 999
+For the 100-sample regime: 0, 24, 49, 74, 99
+The RMSE plots and the density contact sheet look sane. In the transitional regime check, FNO stays below U-Net across all sampled rollout steps, and the U-Net sheets show visibly smoother, stripe-like predictions relative to both target and FNO
